@@ -8,14 +8,41 @@ class ResultPage extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      query: this.props.location.state.query
+      query: this.props.location.state.query,
+      results: []
     };
   }
+
+  componentDidMount() {
+    fetch("/search/", {
+      method: "POST",
+      body: JSON.stringify({
+        query: this.state.query
+      })
+    })
+      .then(res => res.json())
+      .then(res => {
+        console.log(res);
+        this.setState({
+          results: res.results
+        });
+      });
+  }
+
   render() {
     var results = [];
-    for (var i = 0; i < 5; i++) {
-      results.push(<SearchItem />);
-    }
+    this.state.results.forEach(function(result, i) {
+      results.push(
+        <SearchItem
+          key={i}
+          header={result.header}
+          source={result.source}
+          time={result.time}
+          content={result.content}
+          link={result.link}
+        />
+      );
+    });
     return (
       <div>
         <NavBar query={this.state.query} />
@@ -23,7 +50,7 @@ class ResultPage extends Component {
           <Grid.Column width={12}>
             <div class="result-group">
               <Container textAlign="left">
-                <Item.Group>{results}</Item.Group>
+                <Item.Group> {results} </Item.Group>
               </Container>
             </div>
           </Grid.Column>
@@ -32,7 +59,10 @@ class ResultPage extends Component {
           </Grid.Column>
         </Grid>
         <Grid
-          style={{ marginTop: "50px", marginBottom: "30px" }}
+          style={{
+            marginTop: "50px",
+            marginBottom: "30px"
+          }}
           textAlign="center"
         >
           <Pagination defaultActivePage={5} totalPages={10} />
