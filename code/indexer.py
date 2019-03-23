@@ -1,24 +1,38 @@
+'''
+Created on 03/09/2019
+@auther: Jiaxin
+'''
 import os
 from whoosh.index import create_in, open_dir
-from whoosh.fields import Schema, TEXT, ID, STORED
+from whoosh.fields import Schema, TEXT, ID, STORED, DATETIME
 import sys
+import json
+import codecs
+from whoosh.analysis import StemmingAnalyzer
+from datetime import datetime
 
 def get_schema():
     '''
-    Schema definition: title(name of file), path(as ID), content(indexed
-    but not stored),textdata (stored text content), modtime(time of last modification)
+    Schema definition: title(title), path(as ID), url(as ID), content(indexed
+    but not stored),textdata (stored text content), pubtime(publish time), 
+    modtime(time of last modification)
     '''
-    return Schema(title=TEXT(stored=True),path=ID(stored=True),\
-              content=TEXT,textdata=TEXT(stored=True),\
-              modtime=STORED)
+    ana = StemmingAnalyzer() 
+    return Schema(title=TEXT(stored=True),path=ID, url=ID(stored=True),\
+              content=TEXT(analyzer=ana),textdata=TEXT(stored=True),\
+              pubtime=DATETIME(stored=True),modtime=STORED)
 
 def add_doc(writer, path):
-    fp = open(path,'r')
+    fp = codecs.open(path,'r','utf-8')
     print('Adding:', path)
-    text = fp.read()
+    news = json.loads(fp.read())
+    text = news['full_text']
+    title = news['title']
+    url = news['url']
+    date = datetime.strptime(news['publishedAt'][:10],'%Y-%m-%d')
     modtime = os.path.getmtime(path)
-    writer.add_document(title=path.split("\\")[1], path=path,\
-        content=text,textdata=text, modtime=modtime)
+    writer.add_document(title=title, path=path, url=url,\
+        content=text,textdata=text, pubtime=date,modtime=modtime)
     fp.close()  
 
 def clean_index(root):   
@@ -65,11 +79,11 @@ def incremental_index(root):
         writer.commit()
         print('Finish commit')          
 
-def indexer(root, clean=False):
+def indexer(root, clean=True):
     if clean:
         clean_index(root)
     else:
         incremental_index(root)
 
-root = "./corpus"
+root = "./data"
 indexer(root)
