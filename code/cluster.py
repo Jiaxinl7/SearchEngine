@@ -51,7 +51,7 @@ class Cluster:
         min = dist_sim[rank[0]]
         return min, rank[0]
 
-    def onepass_cluster(self, vector_list):
+    def onepass_add(self, vector_list):
         """
         For one pass clustering, assure self.vectors is not None
         :param vector_list: array-like, shape = [samples_size, features_size]
@@ -61,9 +61,9 @@ class Cluster:
         self.cluster_list[0].add_node(0, self.vectors[0])
         self.cluster_num += 1
         for i in range(self.vectors.shape[0])[1:]:
-            self.online_cluster(self.vectors[i], i, add_vector=False)
+            self.online_add(self.vectors[i], i, add_vector=False)
 
-    def online_cluster(self, vec, i=None, add_vector=False):
+    def online_add(self, vec, i=None, add_vector=True):
         """
         For online clustering
         :param vec: 1D array-like
@@ -112,11 +112,11 @@ if __name__ == "__main__":
     data = np.random.randn(N, D)
 
     cluster1 = Cluster(t, D)
-    cluster1.onepass_cluster(data)
+    cluster1.onepass_add(data)
     cluster1.print_result()
 
     cluster2 = Cluster(t, D)
     data1 = np.random.randn(10, D)
     for i in range(data.shape[0]):
-        cluster2.online_cluster(data[i], add_vector=True)
+        cluster2.online_add(data[i])
     cluster2.print_result()
