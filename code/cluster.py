@@ -62,22 +62,23 @@ class EventCluster:
         max = dist_sim[rank[-1]]
         return max, rank[-1]
 
-    def onepass_add(self, vecs):
+    def onepass_add(self, vecs, dates):
         """
         For one pass clustering, assure self.vectors is not None
         :param vector_list: array-like, shape = [samples_size, features_size + 2]
         """
-        self.start_time = vecs[0][1]
-        self.end_time = vecs[-1][1]
-        self.vectors = np.array(vecs)
+        self.start_time = dates[0]
+        self.end_time = dates[-1]
+        self.vectors = vecs
+        self.dates = dates
         self.event_list.append(EventUnit())
         self.event_list[0].add_node(
-            self.vectors[0][0], self.vectors[0][1], self.vectors[0][2:])
+            self.vectors[0][0], self.dates[0], self.vectors[0][1:])
         self.event_num += 1
         for i in range(self.vectors.shape[0])[1:]:
-            self.online_add(self.vectors[i], add_vector=False)
+            self.online_add(self.vectors[i], self.dates[i], add_vector=False)
 
-    def online_add(self, vec, add_vector=True):
+    def online_add(self, vec, doc_date, add_vector=True):
         """
         For online clustering
         :param vec: 1D array-like
@@ -85,11 +86,11 @@ class EventCluster:
         :add_vector: True if run in online mode, False if used by onepass_cluster()
         """
         id = vec[0]
-        time = vec[1]
-        code = vec[2:]
+        time = doc_date
+        code = vec[1:]
 
         if self.vectors is None:
-            self.vectors = np.empty((1, vec.shape[0]-2))
+            self.vectors = np.empty((1, vec.shape[0]-1))
             self.vectors[0, :] = np.array(vec)
             new_event = EventUnit()
             new_event.add_node(id, time, code)
@@ -111,32 +112,34 @@ class EventCluster:
 
     def plot_result(self, label_dict=None):
         if label_dict is None:
-            label_dict = np.empty(self.vectors.shape[0]).astype(int)
+            label_dict = np.empty(self.vectors.shape[0]+1).astype(int)
             for i in range(self.event_num):
                 for j in self.event_list[i].node_list:
                     label_dict[j] = i
-        assert self.vectors.shape[1] == 4
+        assert self.vectors.shape[1] == 3
         true_vecs = self.vectors[np.argsort(self.vectors[:, 0].astype(int))]
         plt.scatter(
-            true_vecs[:, 2], true_vecs[:, 3], c=label_dict)
+            true_vecs[:, 1], true_vecs[:, 2], c=label_dict)
         plt.show()
 
-    def print_result(self, label_dict=None):
-        print("************ cluster result ************")
+    def print_result(self, fo, label_dict=None):
+        fo.write("************ cluster result ************\n")
         for index, event in enumerate(self.event_list):
-            print("cluster: %s " % index)  # event_id
-            print(event.node_list)  # cluster_node_list
+            fo.write("cluster: %s\n" % index)  # event_id
+            # cluster_node_list
+            fo.write(' '.join(str(v) for v in event.node_list))
             if label_dict is not None:
-                print(" ".join([label_dict[n] for n in event.node_list]))
-            print("node num: %s" % event.node_num)
-            print("----------------")
-        print("the number of nodes %s" % len(self.vectors))
-        print("the number of cluster %s" % self.event_num)
+                fo.write(" ".join([label_dict[n] for n in event.node_list]))
+            fo.write("\nnode num: %s\n" % event.node_num)
+            fo.write("----------------\n")
+        fo.write("the number of nodes %s\n" % len(self.vectors))
+        fo.write("the number of cluster %s\n" % self.event_num)
 
 
 class EventDetector:
-    def __init__(self, vecs, cluster_threshold, merge_threshold, time_slice):
+    def __init__(self, vecs, dates, cluster_threshold, merge_threshold, time_slice):
         self.vecs = vecs
+        self.dates = dates
         self.time_slice = time_slice
         self.subsets = []
         self.cluster_threshold = cluster_threshold
@@ -148,7 +151,9 @@ class EventDetector:
         """
         sort vecs by time in ascending order
         """
-        pass
+        order = np.argsort(self.dates)
+        self.vecs = self.vecs[order]
+        self.dates = self.dates[order]
 
     def time_slicing(self):
         start_id = 0
@@ -160,15 +165,17 @@ class EventDetector:
             start_id = end_id
 
     def same_bucket(self, start_id, end_id, time_slice):
-        start = self.vecs[start_id][1]
-        end = self.vecs[end_id][1]
-        return (end - start) < time_slice
+        start = self.dates[start_id]
+        end = self.dates[end_id]
+        interval = end - start
+        return interval.days < time_slice
         # transform from int to datatime
 
     def parallel_clustering(self):
         for pair in self.subsets:
             new_event_cluster = EventCluster(t=self.cluster_threshold)
-            new_event_cluster.onepass_add(self.vecs[pair[0]:pair[1]])
+            new_event_cluster.onepass_add(
+                self.vecs[pair[0]:pair[1]], self.dates[pair[0]:pair[1]])
             self.event_cluster_set.append(new_event_cluster)
             print("Parallel_clustring: Finish {}".format(pair))
             del new_event_cluster
@@ -208,16 +215,16 @@ class EventDetector:
         return e1
 
     def construct_inverted_index(self):
-        self.inverted_index = np.empty(self.vecs.shape[0]).astype(int)
+        self.inverted_index = np.empty(self.vecs.shape[0]+1).astype(int)
         for i in range(len(self.event_set)):
             for j in self.event_set[i].node_list:
                 self.inverted_index[j] = i
 
     def plot_result(self):
-        assert self.vecs.shape[1] == 4
+        assert self.vecs.shape[1] == 3
         true_vecs = self.vecs[np.argsort(self.vecs[:, 0].astype(int))]
         plt.scatter(
-            true_vecs[:, 2], true_vecs[:, 3], c=self.inverted_index)
+            true_vecs[:, 1], true_vecs[:, 2], c=self.inverted_index)
         plt.show()
 
     def run(self):
@@ -238,38 +245,56 @@ class EventDetector:
 
 
 if __name__ == "__main__":
-    N, D = 1000, 2
-    data = np.random.randn(N, D)
+    # N, D = 5000, 2
+    # data = np.random.randn(N, D)
     # data = np.random.randint(5, size=(N, D))
 
-    id = np.random.permutation(N).reshape((-1, 1)).astype(int)
-    timestamp = np.arange(N).reshape((-1, 1))
-    vecs = np.hstack((id, timestamp, data))
-    cluster_threshold = 0.7
-    merge_threshold = 0.9
-    time_slice = N/10
+    # id = np.random.permutation(N).reshape((-1, 1)).astype(int)
+    # timestamp = np.arange(N).reshape((-1, 1))
+    # vecs = np.hstack((id, timestamp, data))
+    fo = open("cluster_log.txt", "w")
+
+    vecs = np.load('docs.npy')
+    vecs = np.hstack((vecs[:, -1].reshape((-1, 1)), vecs[:, :300]))
+    dates = np.load('dates.npy')
+    cluster_threshold = 0.4
+    merge_threshold = 0.5
+    time_slice = 7
+
+    test_vecs = vecs[:100]
+    test_dates = dates[:100]
+    
+    print("input shape:", vecs.shape, dates.shape)
+    print("# Parameters: cluster_threshold: {}, merge_threshold: {}, time_slice: {}(days)".format(cluster_threshold,merge_threshold,time_slice))
+    print("=========================================================\n")
 
     # Single Cluster
-    cluster1 = EventCluster(cluster_threshold)
-    cluster1.onepass_add(vecs)
-    cluster1.print_result()
-    cluster1.plot_result()
+    # cluster1 = EventCluster(cluster_threshold)
+    # cluster1.onepass_add(vecs, dates)
+    # cluster1.print_result(fo)
 
     # Multiple Cluster and Merging
-    detector = EventDetector(vecs, cluster_threshold,
+    detector = EventDetector(vecs, dates, cluster_threshold,
                              merge_threshold, time_slice)
+    detector.preprocessing()
     detector.time_slicing()
     print(detector.subsets)
     detector.parallel_clustering()
     sum_event = 0
     for ec in detector.event_cluster_set:
         sum_event += ec.event_num
-    print("Event number before merging: {}.".format(sum_event))
+    print("Events number before merging: {}.".format(sum_event))
     detector.merge_all_events()
-    print("Event number after merging: {}.".format(len(detector.event_set)))
+    print("Events number after merging: {}.".format(len(detector.event_set)))
     sum_doc = 0
     for ec in detector.event_set:
         sum_doc += ec.node_num
     print("Total num of document in event_set is: {}.".format(sum_doc))
     detector.construct_inverted_index()
-    detector.plot_result()
+    i = 0
+    while len(detector.event_set[i].node_list) < 4 and i < len(detector.event_set):
+        i += 1
+    print(detector.event_set[i].node_list)
+    # detector.plot_result()
+
+    fo.close()
