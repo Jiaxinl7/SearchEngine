@@ -221,22 +221,31 @@ class EventDetector:
         plt.show()
 
     def run(self):
+        print("EventDetector: Start Running!")
+        start = time.time()
+        print("preprocessing...")
         self.preprocessing()
+        print("time_slicing...")
         self.time_slicing()
+        print("parallel_clustering...")
         self.parallel_clustering()
-        print("Start merge_all_events")
+        print("merging all events...")
         self.merge_all_events()
+        print("constructing inverted index...")
+        self.construct_inverted_index()
+        end = time.time()
+        print("Running Time: {}".format(end-start))
 
 
 if __name__ == "__main__":
     N, D = 1000, 2
     data = np.random.randn(N, D)
-    #data = np.random.randint(5, size=(N, D))
+    # data = np.random.randint(5, size=(N, D))
 
     id = np.random.permutation(N).reshape((-1, 1)).astype(int)
-    time = np.arange(N).reshape((-1, 1))
-    vecs = np.hstack((id, time, data))
-    cluster_threshold = 0.8
+    timestamp = np.arange(N).reshape((-1, 1))
+    vecs = np.hstack((id, timestamp, data))
+    cluster_threshold = 0.7
     merge_threshold = 0.9
     time_slice = N/10
 
