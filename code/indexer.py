@@ -29,7 +29,7 @@ def add_doc(writer, path):
     text = news['full_text']
     title = news['title']
     url = news['url']
-    date = datetime.strptime(news['publishedAt'][:10],'%Y-%m-%d')
+    date = datetime.strptime(news['date_publish'][:10],'%Y-%m-%d')
     modtime = os.path.getmtime(path)
     writer.add_document(title=title, path=path, url=url,\
         content=text,textdata=text, pubtime=date,modtime=modtime)
@@ -85,5 +85,5 @@ def indexer(root, clean=True):
     else:
         incremental_index(root)
 
-root = "./data"
+root = "./data/text_log"
 indexer(root)
