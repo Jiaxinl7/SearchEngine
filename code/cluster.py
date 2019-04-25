@@ -369,4 +369,4 @@ if __name__ == "__main__":
         detector.run()
     else:
         test("../detector_models/text_log_mailonline_0.8_0.9.txt",
-             "text_log_mailonline", 3, 3, data_type="json")
+             "text_log_mailonline", 3, 5, data_type="json")

@@ -84,7 +84,7 @@ class Encoder:
     def doc2vec300(self, doc, model):
         return model.infer_vector(doc.split())
 
-    def encode(self, mode, model_path=None, max_features=None):
+    def encode(self, mode, model_path=None):
         if mode == 'tfidf':
             print("Encode corpus using tfidf...")
             vectorizer = CountVectorizer(
@@ -114,8 +114,8 @@ class Encoder:
             self.vecs = np.hstack(
                 (self.ids.reshape((-1, 1)), self.vecs))
 
-    def encode_and_save(self, mode, model_path=None, path=result_path, max_features=None):
-        self.encode(mode, model_path, max_features)
+    def encode_and_save(self, mode, model_path=None, path=result_path):
+        self.encode(mode, model_path)
         print("Saving docs and dates...")
         np.save('{}{}_docs.npy'.format(result_path, self.name), self.vecs)
         if not self.dates is None:
@@ -124,8 +124,8 @@ class Encoder:
 
 
 if __name__ == "__main__":
-    encoder = Encoder("text_log_mailonline")
-    # encoder.read_from_csv()
-    encoder.read_from_json()
-    encoder.encode_and_save('doc2vec', model_path)
-    # encoder.encode_and_save('tfidf', max_features=5000)
+    encoder = Encoder("articles1")
+    encoder.read_from_csv()
+    # encoder.read_from_json()
+    # encoder.encode_and_save('doc2vec', model_path)
+    encoder.encode_and_save('tfidf')
