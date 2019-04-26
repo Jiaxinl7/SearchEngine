@@ -13,3 +13,5 @@ frontend
 code/.vscode
 code/__pycache__
 code/indexdir
+
+frontend/node_modules
