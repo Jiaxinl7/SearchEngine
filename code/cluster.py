@@ -5,9 +5,10 @@ Ref: https://github.com/Hareric/ClusterTool
 import numpy as np
 import time
 import matplotlib.pyplot as plt
-import pickle
 import codecs
+import utils
 import json
+import pickle
 import pandas as pd
 pd.set_option('display.max_colwidth', 500)
 
@@ -158,7 +159,7 @@ class EventDetector:
         self.event_set = None
         self.name = "{}_{}_{}".format(name, cluster_threshold, merge_threshold)
 
-    def preprocessing(self, num=10000):
+    def preprocessing(self, num=100):
         """
         sort vecs by time in ascending order
         """
@@ -171,7 +172,7 @@ class EventDetector:
         start_id = 0
         end_id = 1
         while start_id < self.vecs.shape[0]:
-            while end_id < self.vecs.shape[0] and self.same_bucket(start_id, end_id, time_slice):
+            while end_id < self.vecs.shape[0] and self.same_bucket(start_id, end_id, self.time_slice):
                 end_id += 1
             self.subsets.append([start_id, end_id])
             start_id = end_id
@@ -228,16 +229,19 @@ class EventDetector:
         return e1
 
     def save(self, root):
-        file = open(root + self.name+'.txt', 'wb')
-        pickle.dump(self, file, protocol=2)
-        file.close()
+        # file = open(root + self.name+'.txt', 'wb')
+        # pickle.dump(self, file, protocol=2)
+        # file.close()
+
+        # from cluster import EventDetector
+
+        utils.save_cluster(self)
 
     def construct_inverted_index(self):
-        max_id = np.max(self.vecs[:, 0]).astype(int)
-        self.inverted_index = np.empty(max_id).astype(int)
+        self.inverted_index = {}
         for i in range(len(self.event_set)):
             for j in self.event_set[i].node_list:
-                self.inverted_index[j] = i
+                self.inverted_index[str(j)] = i
 
     def plot_result(self):
         assert self.vecs.shape[1] == 3
@@ -267,8 +271,8 @@ class EventDetector:
         print("merging all events...")
         self.merge_all_events()
         print("Events number after merging: {}.".format(len(self.event_set)))
-        # print("constructing inverted index...")
-        # self.construct_inverted_index()
+        print("constructing inverted index...")
+        self.construct_inverted_index()
         self.save(model_path)
         end = time.time()
         print("Running Time: {}".format(end-start))
@@ -292,6 +296,7 @@ def parse_args():
 def test(path, name, min_size=3, num=1, data_type='json'):
     print("Load model from {}".format(path))
     filehandler = open(path, 'rb')
+  
     detector = pickle.load(filehandler)
     print("detector name: ", detector.name)
     print("# Parameters: cluster_threshold: {}, merge_threshold: {}, time_slice: {}(days)".format(
@@ -335,6 +340,7 @@ def show_event(detector, name, min_size, num, data_type):
 
 if __name__ == "__main__":
 
+   
     corpus_name = "text_log_mailonline"
     vecs = np.load('{}{}_docs.npy'.format(vecs_path, corpus_name))
     dates = np.load('{}{}_dates.npy'.format(vecs_path, corpus_name))
@@ -362,7 +368,8 @@ if __name__ == "__main__":
     # Multiple Cluster and Merging
 
     # mode = 'test'
-    mode = 'test'
+    from cluster import EventDetector
+    mode = 'train'
     if mode == 'train':
         detector = EventDetector(vecs, dates, cluster_threshold,
                                  merge_threshold, time_slice, name=corpus_name)

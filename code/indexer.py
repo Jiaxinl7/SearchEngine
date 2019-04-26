@@ -27,9 +27,9 @@ def get_schema():
 
 def add_doc(writer, path):
     fp = codecs.open(path, 'r', 'utf-8')
-    print('Adding:', path)
+    # print('Adding:', path)
     news = json.loads(fp.read())
-    text = news['full_text']
+    text = news['text']
     title = news['title']
     url = news['url']
     date = datetime.strptime(news['date_publish'][:10], '%Y-%m-%d')
@@ -48,8 +48,12 @@ def clean_index(root):
     writer = ix.writer()
     print('Clean index, start adding...')
     filepaths = [os.path.join(root, i) for i in os.listdir(root)]
+    count = 0
     for path in filepaths:
+        if count % 1000 == 0:
+            print("Add {} files".format(count))
         add_doc(writer, path)
+        count += 1
     print('Clean index, finish add, now commiting...')
     writer.commit()
     print('Finish commit')
@@ -108,8 +112,7 @@ def test():
     print()
 
 
-root = "./data/text_log"
+root = "../data/text_log_mailonline"
 
 if __name__ == "__main__":
     indexer(root)
-    test()

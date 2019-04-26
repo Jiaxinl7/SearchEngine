@@ -1,0 +1,15 @@
+corpus
+data
+detector_models
+vecs
+apnews_dbow
+frontend
+
+
+*.zip
+.vscode
+
+
+code/.vscode
+code/__pycache__
+code/indexdir

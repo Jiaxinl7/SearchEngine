@@ -39,7 +39,7 @@ class Encoder:
             fp = codecs.open(path, 'r', 'utf-8')
             news = json.loads(fp.read())
             # text = news['full_text']
-            text = news['title']
+            text = news['title'] + news['description']
             self.corpus.append(text)
             date = datetime.strptime(news['date_publish'][:10], '%Y-%m-%d')
             if i == 0:
@@ -103,7 +103,6 @@ class Encoder:
         if mode == 'doc2vec':
             print("Encode corpus using doc2vec...")
             model = Doc2Vec.load(model_path)
-
             self.vecs = np.empty((self.corpus.shape[0], 300))
             for i in range(self.corpus.shape[0]):
                 if i % 1000 == 0:
@@ -124,8 +123,8 @@ class Encoder:
 
 
 if __name__ == "__main__":
-    encoder = Encoder("articles1")
-    encoder.read_from_csv()
-    # encoder.read_from_json()
-    # encoder.encode_and_save('doc2vec', model_path)
-    encoder.encode_and_save('tfidf')
+    encoder = Encoder("text_log_mailonline")
+    # encoder.read_from_csv()
+    encoder.read_from_json()
+    encoder.encode_and_save('doc2vec', model_path)
+    # encoder.encode_and_save('tfidf')
