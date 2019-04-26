@@ -5,6 +5,16 @@ Ref: https://github.com/Hareric/ClusterTool
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+import codecs
+import utils
+import json
+import pickle
+import pandas as pd
+pd.set_option('display.max_colwidth', 500)
+
+vecs_path = "../vecs/"
+data_path = "../data/"
+model_path = "../detector_models/"
 
 
 class EventUnit:
@@ -28,6 +38,7 @@ class EventUnit:
             self.centroid = np.array(node_vec)  # initialize centroid
             self.start_time = node_time
             self.end_time = node_time
+
         self.node_num += 1
 
 
@@ -137,7 +148,7 @@ class EventCluster:
 
 
 class EventDetector:
-    def __init__(self, vecs, dates, cluster_threshold, merge_threshold, time_slice):
+    def __init__(self, vecs, dates, cluster_threshold, merge_threshold, time_slice, name="EventDetector"):
         self.vecs = vecs
         self.dates = dates
         self.time_slice = time_slice
@@ -146,20 +157,22 @@ class EventDetector:
         self.merge_threshold = merge_threshold
         self.event_cluster_set = []
         self.event_set = None
+        self.name = "{}_{}_{}".format(name, cluster_threshold, merge_threshold)
 
-    def preprocessing(self):
+    def preprocessing(self, num=100):
         """
         sort vecs by time in ascending order
         """
-        order = np.argsort(self.dates)
+        order = np.argsort(self.dates)[-1*num:]
         self.vecs = self.vecs[order]
         self.dates = self.dates[order]
+        # print("preprocessing", self.vecs.shape)
 
     def time_slicing(self):
         start_id = 0
         end_id = 1
         while start_id < self.vecs.shape[0]:
-            while end_id < self.vecs.shape[0] and self.same_bucket(start_id, end_id, time_slice):
+            while end_id < self.vecs.shape[0] and self.same_bucket(start_id, end_id, self.time_slice):
                 end_id += 1
             self.subsets.append([start_id, end_id])
             start_id = end_id
@@ -169,7 +182,8 @@ class EventDetector:
         end = self.dates[end_id]
         interval = end - start
         return interval.days < time_slice
-        # transform from int to datatime
+
+        # return end_id - start_id < time_slice
 
     def parallel_clustering(self):
         for pair in self.subsets:
@@ -214,11 +228,20 @@ class EventDetector:
         e1.node_list += e2.node_list
         return e1
 
+    def save(self, root):
+        # file = open(root + self.name+'.txt', 'wb')
+        # pickle.dump(self, file, protocol=2)
+        # file.close()
+
+        # from cluster import EventDetector
+
+        utils.save_cluster(self)
+
     def construct_inverted_index(self):
-        self.inverted_index = np.empty(self.vecs.shape[0]+1).astype(int)
+        self.inverted_index = {}
         for i in range(len(self.event_set)):
             for j in self.event_set[i].node_list:
-                self.inverted_index[j] = i
+                self.inverted_index[str(j)] = i
 
     def plot_result(self):
         assert self.vecs.shape[1] == 3
@@ -228,45 +251,114 @@ class EventDetector:
         plt.show()
 
     def run(self):
+        print("input shape:", self.vecs.shape, self.dates.shape)
+        print("# Parameters: cluster_threshold: {}, merge_threshold: {}, time_slice: {}(days)".format(
+            self.cluster_threshold, self.merge_threshold, self.time_slice))
+        print("=========================================================\n")
         print("EventDetector: Start Running!")
         start = time.time()
         print("preprocessing...")
         self.preprocessing()
         print("time_slicing...")
         self.time_slicing()
+        print(self.subsets)
         print("parallel_clustering...")
         self.parallel_clustering()
+        sum_event = 0
+        for ec in self.event_cluster_set:
+            sum_event += ec.event_num
+        print("Events number before merging: {}.".format(sum_event))
         print("merging all events...")
         self.merge_all_events()
+        print("Events number after merging: {}.".format(len(self.event_set)))
         print("constructing inverted index...")
         self.construct_inverted_index()
+        self.save(model_path)
         end = time.time()
         print("Running Time: {}".format(end-start))
 
 
+def parse_args():
+    # override default parameters with command line parameters
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='Process input method and parameters.')
+    parser.add_argument('--ct', type=float,
+                        help='threshold for single pass clustering')
+    parser.add_argument('--mt', type=float,
+                        help='threshold for merge subsets')
+    parser.add_argument('--time_slice', type=int,
+                        help='threshold for merge subsets')
+    args = parser.parse_args()
+    return args.ct, args.mt, args.time_slice
+
+
+def test(path, name, min_size=3, num=1, data_type='json'):
+    print("Load model from {}".format(path))
+    filehandler = open(path, 'rb')
+  
+    detector = pickle.load(filehandler)
+    print("detector name: ", detector.name)
+    print("# Parameters: cluster_threshold: {}, merge_threshold: {}, time_slice: {}(days)".format(
+        detector.cluster_threshold, detector.merge_threshold, detector.time_slice))
+    print("======================================================================================")
+    show_event(detector, name, min_size, num, data_type)
+
+
+def show_event(detector, name, min_size, num, data_type):
+    i = 0
+    if data_type == 'csv':
+        csv_data = pd.read_csv(data_path+name+'.csv')
+    else:
+        path = data_path+name+'/'
+    for j in range(num):
+        while len(detector.event_set[i].node_list) < min_size and i < len(detector.event_set):
+            i += 1
+        print(detector.event_set[i].node_list)
+        if data_type == 'csv':
+            df = csv_data.loc[csv_data['id'].isin(
+                detector.event_set[i].node_list)]
+            print(df[['title']])
+        else:
+            for item_path in detector.event_set[i].node_list:
+                if data_type == 'json':
+                    fp = codecs.open(
+                        '{}{}.json'.format(path, item_path), 'r', 'utf-8')
+                    news = json.loads(fp.read())
+                    # text = news['full_text']
+                    text = news['title']
+                    print(item_path)
+                    print(text)
+                    fp.close()
+                if data_type == 'txt':
+                    fp = open('{}{}.json'.format(path, item_path))
+                    print(fp.read())
+                    fp.close()
+        print("-----------------------------------------------------------------------------------")
+        i += 1
+
+
 if __name__ == "__main__":
-    # N, D = 5000, 2
-    # data = np.random.randn(N, D)
-    # data = np.random.randint(5, size=(N, D))
 
-    # id = np.random.permutation(N).reshape((-1, 1)).astype(int)
-    # timestamp = np.arange(N).reshape((-1, 1))
-    # vecs = np.hstack((id, timestamp, data))
-    fo = open("cluster_log.txt", "w")
-
-    vecs = np.load('docs.npy')
-    vecs = np.hstack((vecs[:, -1].reshape((-1, 1)), vecs[:, :300]))
-    dates = np.load('dates.npy')
-    cluster_threshold = 0.4
-    merge_threshold = 0.5
+   
+    corpus_name = "text_log_mailonline"
+    vecs = np.load('{}{}_docs.npy'.format(vecs_path, corpus_name))
+    dates = np.load('{}{}_dates.npy'.format(vecs_path, corpus_name))
+    cluster_threshold = 0.8
+    merge_threshold = 0.9
     time_slice = 7
 
-    test_vecs = vecs[:100]
-    test_dates = dates[:100]
-    
-    print("input shape:", vecs.shape, dates.shape)
-    print("# Parameters: cluster_threshold: {}, merge_threshold: {}, time_slice: {}(days)".format(cluster_threshold,merge_threshold,time_slice))
-    print("=========================================================\n")
+    import sys
+    if len(sys.argv) > 3:
+        cluster_threshold, merge_threshold, time_slice = parse_args()
+    else:
+        import warnings
+        warnings.warn("Using default Parameters ")
+
+    # vecs = np.hstack((vecs[:, -1].reshape((-1, 1)), vecs[:, :300]))
+    # dates = np.arange(vecs.shape[0]).reshape((-1, 1))
+    # test_vecs = vecs[30000:]
+    # test_dates = dates[30000:]
 
     # Single Cluster
     # cluster1 = EventCluster(cluster_threshold)
@@ -274,27 +366,14 @@ if __name__ == "__main__":
     # cluster1.print_result(fo)
 
     # Multiple Cluster and Merging
-    detector = EventDetector(vecs, dates, cluster_threshold,
-                             merge_threshold, time_slice)
-    detector.preprocessing()
-    detector.time_slicing()
-    print(detector.subsets)
-    detector.parallel_clustering()
-    sum_event = 0
-    for ec in detector.event_cluster_set:
-        sum_event += ec.event_num
-    print("Events number before merging: {}.".format(sum_event))
-    detector.merge_all_events()
-    print("Events number after merging: {}.".format(len(detector.event_set)))
-    sum_doc = 0
-    for ec in detector.event_set:
-        sum_doc += ec.node_num
-    print("Total num of document in event_set is: {}.".format(sum_doc))
-    detector.construct_inverted_index()
-    i = 0
-    while len(detector.event_set[i].node_list) < 4 and i < len(detector.event_set):
-        i += 1
-    print(detector.event_set[i].node_list)
-    # detector.plot_result()
 
-    fo.close()
+    # mode = 'test'
+    from cluster import EventDetector
+    mode = 'train'
+    if mode == 'train':
+        detector = EventDetector(vecs, dates, cluster_threshold,
+                                 merge_threshold, time_slice, name=corpus_name)
+        detector.run()
+    else:
+        test("../detector_models/text_log_mailonline_0.8_0.9.txt",
+             "text_log_mailonline", 3, 5, data_type="json")
