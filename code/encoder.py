@@ -15,9 +15,10 @@ from sklearn.decomposition import PCA
 import string
 import pandas as pd
 
-data_path = "../data/"
-result_path = "../vecs/"
-model_path = '../apnews_dbow/doc2vec.bin'
+dirname = os.path.dirname(__file__)
+data_path = os.path.join(dirname, '../data/')
+result_path = os.path.join(dirname, "../vecs/")
+model_path = os.path.join(dirname, '../apnews_dbow/doc2vec.bin')
 
 
 class Encoder:
@@ -40,6 +41,7 @@ class Encoder:
             news = json.loads(fp.read())
             # text = news['full_text']
             text = news['title'] + news['description']
+            # text = news['entity']
             self.corpus.append(text)
             date = datetime.strptime(news['date_publish'][:10], '%Y-%m-%d')
             if i == 0:
@@ -94,7 +96,7 @@ class Encoder:
             tfidf = transformer.fit_transform(X)
             del self.corpus
             del X
-            pca = PCA(n_components=0.95)
+            pca = PCA(n_components=0.99)
             pca.fit(tfidf.toarray())
             tfidf = pca.transform(tfidf.toarray())
             print(tfidf.shape)
@@ -112,19 +114,51 @@ class Encoder:
                 self.vecs[i, :] = doc_vec
             self.vecs = np.hstack(
                 (self.ids.reshape((-1, 1)), self.vecs))
+        if mode == 'mixed':
+            print('Encode corpus using doc2vec for text and tfidf for entities')
+
+            print("Encode corpus using doc2vec...")
+            model = Doc2Vec.load(model_path)
+            self.vecs = np.empty((self.corpus.shape[0], 300))
+            for i in range(self.corpus.shape[0]):
+                if i % 1000 == 0:
+                    print('Process {} docs'.format(i))
+                # raw_text = self.corpus[i].split('-')[0]
+                doc_vec = self.doc2vec300(self.corpus[i], model)
+                self.vecs[i, :] = doc_vec
+            self.vecs = np.hstack(
+                (self.ids.reshape((-1, 1)), self.vecs))
+
+            print("Encode corpus using tfidf...")
+            vectorizer = CountVectorizer(
+                stop_words='english')
+            X = vectorizer.fit_transform(self.corpus)
+            transformer = TfidfTransformer()
+            tfidf = transformer.fit_transform(X)
+            del self.corpus
+            del X
+            pca = PCA(n_components=0.99)
+            pca.fit(tfidf.toarray())
+            tfidf = pca.transform(tfidf.toarray())
+            print('tfidf size:', tfidf.shape)
+            self.vecs = np.hstack(
+                (self.vecs, np.array(tfidf)))
+            print('mixed size:', self.vecs.shape)
+
+            
 
     def encode_and_save(self, mode, model_path=None, path=result_path):
         self.encode(mode, model_path)
         print("Saving docs and dates...")
-        np.save('{}{}_docs.npy'.format(result_path, self.name), self.vecs)
+        np.save('{}{}_{}_docs.npy'.format(result_path, mode, self.name), self.vecs)
         if not self.dates is None:
-            np.save('{}{}_dates.npy'.format(
+            np.save('{}_{}_dates.npy'.format(
                 result_path, self.name), self.dates)
 
 
 if __name__ == "__main__":
-    encoder = Encoder("text_log_mailonline")
+    encoder = Encoder("labeled_news")
     # encoder.read_from_csv()
     encoder.read_from_json()
-    encoder.encode_and_save('doc2vec', model_path)
+    encoder.encode_and_save('mixed', model_path)
     # encoder.encode_and_save('tfidf')

@@ -1,6 +1,8 @@
 import pickle
+import os
+dirname = os.path.dirname(__file__)
 
-model_path = "../detector_models/"
+model_path = os.path.join(dirname, "../detector_models/")
 
 
 def save_cluster(cluster):
