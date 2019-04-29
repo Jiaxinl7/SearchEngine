@@ -7,8 +7,8 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import codecs
-import tools.utils as utils
-# import utils
+# import tools.utils as utils
+import utils
 import json
 import pickle
 import pandas as pd
@@ -178,11 +178,11 @@ class EventDetector:
         self.name = "{}_{}_{}_{}".format(
             name, cluster_threshold, merge_threshold, portion)
 
-    def preprocessing(self, num=1000):
+    def preprocessing(self, num=3000):
         """
         sort vecs by time in ascending order
         """
-        order = np.argsort(self.dates)[-1*num:]
+        order = np.argsort(self.dates)[:num]
         self.vecs = self.vecs[order]
         self.dates = self.dates[order]
         # print("preprocessing", self.vecs.shape)
@@ -377,10 +377,10 @@ def main(name):
     vecs = np.load('{}\\{}_{}_docs.npy'.format(
         vecs_path, corpus_name, encode_type))
     dates = np.load('{}\\{}_dates.npy'.format(vecs_path, corpus_name))
-    cluster_threshold = 0.3
-    merge_threshold = 0.3
+    cluster_threshold = 0.1
+    merge_threshold = 0.1
     time_slice = 7
-    portion = 0.7
+    portion = 0
     mode = 'train'
 
     import sys
