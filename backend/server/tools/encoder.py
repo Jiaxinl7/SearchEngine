@@ -194,9 +194,13 @@ class Encoder:
                 result_path, self.name), self.dates)
 
 
-if __name__ == "__main__":
-    encoder = Encoder("text_log")
+def main(corpus_name):
+    encoder = Encoder(corpus_name)
     # encoder.read_from_csv()
     encoder.read_from_json()
     encoder.encode_and_save('mixed', model_path)
     # encoder.encode_and_save('tfidf')
+
+
+if __name__ == "__main__":
+    main("text_log")

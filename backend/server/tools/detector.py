@@ -182,7 +182,7 @@ class EventDetector:
         """
         sort vecs by time in ascending order
         """
-        order = np.argsort(self.dates)
+        order = np.argsort(self.dates)[-1*num:]
         self.vecs = self.vecs[order]
         self.dates = self.dates[order]
         # print("preprocessing", self.vecs.shape)
@@ -371,14 +371,14 @@ def show_event(detector, name, min_size, num, data_type):
         i += 1
 
 
-def main():
+def main(name):
     encode_type = 'mixed'
-    corpus_name = "text_log"
+    corpus_name = name
     vecs = np.load('{}\\{}_{}_docs.npy'.format(
         vecs_path, corpus_name, encode_type))
     dates = np.load('{}\\{}_dates.npy'.format(vecs_path, corpus_name))
-    cluster_threshold = 0.7
-    merge_threshold = 0.8
+    cluster_threshold = 0.3
+    merge_threshold = 0.3
     time_slice = 7
     portion = 0.7
     mode = 'train'
@@ -402,4 +402,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main("text_log")

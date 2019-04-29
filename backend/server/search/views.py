@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from tools.searcher import Searcher
-
+import tools.setup as setup
 # Create your views here.
 
 
@@ -58,3 +58,11 @@ def hot_event(request):
         pagenum = json.loads(request.body).get('pagenum')
         print("Receive a search hot event request, pagenum: {}".format(pagenum))
         return JsonResponse(s.get_hot_event(pagenum))
+
+
+@csrf_exempt
+def setup(request):
+    if request.method == 'GET':
+        print("Receive a setup request")
+        setup.main("labeled_news")
+        return
