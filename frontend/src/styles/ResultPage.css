@@ -1,9 +1,31 @@
 .result-group {
     margin-left: 100px;
-    margin-right: 100px;
+    margin-right: 50px;
     margin-top: 50px;
 }
 
 .result-item {
     margin-top: 20px;
+}
+
+.hot_topic {
+    margin-top: 50px;
+    margin-right: 50px;
+}
+
+.event_card_group {
+    margin-left: 100px;
+    margin-right: 100px;
+}
+
+.event_message {
+    margin-top: 30px;
+    margin-bottom: 30px;
+}
+
+.event_feed_group {
+    margin-left: 100px;
+    margin-right: 100px;
+    margin-top: 50px;
+    margin-bottom: 50px;
 }

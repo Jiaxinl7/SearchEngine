@@ -22,7 +22,7 @@ def get_schema():
     ana = StemmingAnalyzer()
     return Schema(title=TEXT(stored=True), path=ID, url=ID(stored=True),
                   content=TEXT(analyzer=ana), textdata=TEXT(stored=True),
-                  pubtime=DATETIME(stored=True), modtime=STORED)
+                  pubtime=DATETIME(stored=True), modtime=STORED, source=TEXT(stored=True))
 
 
 def add_doc(writer, path):
@@ -32,10 +32,11 @@ def add_doc(writer, path):
     text = news['text']
     title = news['title']
     url = news['url']
+    source = news['source']
     date = datetime.strptime(news['date_publish'][:10], '%Y-%m-%d')
     modtime = os.path.getmtime(path)
     writer.add_document(title=title, path=path, url=url,
-                        content=text, textdata=text, pubtime=date, modtime=modtime)
+                        content=text, textdata=text, pubtime=date, modtime=modtime, source=source)
     fp.close()
 
 
@@ -112,7 +113,7 @@ def test():
     print()
 
 
-root = "../data/text_log_mailonline"
+root = "../../../data/text_log_mailonline"
 
 if __name__ == "__main__":
     indexer(root)

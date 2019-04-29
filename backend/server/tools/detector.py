@@ -1,3 +1,4 @@
+import os
 """
 Ref: https://github.com/Hareric/ClusterTool
 """
@@ -6,36 +7,45 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import codecs
-import utils
+import tools.utils as utils
+# import utils
 import json
 import pickle
 import pandas as pd
+import os
 pd.set_option('display.max_colwidth', 500)
 
-vecs_path = "../vecs/"
-data_path = "../data/"
-model_path = "../detector_models/"
+dirname = os.path.dirname(__file__)
+vecs_path = os.path.join(dirname, 'vecs')
+data_path = os.path.join(dirname, "data")
+model_path = os.path.join(dirname, "detector_models")
 
 
 class EventUnit:
     def __init__(self):
         self.node_list = []     # original data belongs to this event unit
         self.node_num = 0       # num of data
-        self.centroid = None    # centroid
+        self.centroid_t = None    # tfidf centroid
+        self.centroid_d = None    # doc2vec centrids
         self.start_time = None  # first doc in the event
         self.end_time = None    # last doc in the event
 
     def add_node(self, node_id, node_time, node_vec):
+        node_vec_d = node_vec[:300]
+        node_vec_t = node_vec[300:]
         self.node_list.append(node_id.astype(int))
         try:
-            self.centroid = (self.node_num * self.centroid +
-                             node_vec) / (self.node_num + 1)  # update centroid
+            self.centroid_d = (self.node_num * self.centroid_d +
+                               node_vec_d) / (self.node_num + 1)  # update centroid
+            self.centroid_t = (self.node_num * self.centroid_t +
+                               node_vec_t) / (self.node_num + 1)
             if node_time < self.start_time:
                 self.start_time = node_time
             if node_time > self.end_time:
                 self.end_time = node_time
         except TypeError:
-            self.centroid = np.array(node_vec)  # initialize centroid
+            self.centroid_d = np.array(node_vec_d)  # initialize centroid
+            self.centroid_t = np.array(node_vec_t)
             self.start_time = node_time
             self.end_time = node_time
 
@@ -43,13 +53,14 @@ class EventUnit:
 
 
 class EventCluster:
-    def __init__(self, t):
+    def __init__(self, t, p):
         """
         :param t: float, threshold to determinate whether this vector belongs to previous events
         :param D: features_size
         :return:
         """
         self.threshold = t
+        self.portion = p
         self.vectors = None
         self.event_list = []  # after clustering
         self.event_num = 0
@@ -63,11 +74,17 @@ class EventCluster:
         :return min: minimum distance between vec and all centroids
         :return rank[-1]: the event_id with minimum distance
         """
+        vec_d = vec[:300]
+        vec_t = vec[300:]
         dist_sim = np.empty(len(self.event_list))
         for i in range(dist_sim.shape[0]):
-            dist_sim[i] = np.inner(vec, self.event_list[i].centroid) / \
-                (np.linalg.norm(vec) *
-                 np.linalg.norm(self.event_list[i].centroid))
+            d_sim = np.inner(vec_d, self.event_list[i].centroid_d) / \
+                (np.linalg.norm(vec_d) *
+                 np.linalg.norm(self.event_list[i].centroid_d))
+            t_sim = np.inner(vec_t, self.event_list[i].centroid_t) / \
+                (np.linalg.norm(vec_t) *
+                 np.linalg.norm(self.event_list[i].centroid_t))
+            dist_sim[i] = self.portion * t_sim + (1-self.portion)*d_sim
 
         rank = np.argsort(dist_sim)
         max = dist_sim[rank[-1]]
@@ -148,22 +165,24 @@ class EventCluster:
 
 
 class EventDetector:
-    def __init__(self, vecs, dates, cluster_threshold, merge_threshold, time_slice, name="EventDetector"):
+    def __init__(self, vecs, dates, cluster_threshold, merge_threshold, portion, time_slice, name="EventDetector"):
         self.vecs = vecs
         self.dates = dates
         self.time_slice = time_slice
         self.subsets = []
+        self.portion = portion
         self.cluster_threshold = cluster_threshold
         self.merge_threshold = merge_threshold
         self.event_cluster_set = []
         self.event_set = None
-        self.name = "{}_{}_{}".format(name, cluster_threshold, merge_threshold)
+        self.name = "{}_{}_{}_{}".format(
+            name, cluster_threshold, merge_threshold, portion)
 
-    def preprocessing(self, num=100):
+    def preprocessing(self, num=1000):
         """
         sort vecs by time in ascending order
         """
-        order = np.argsort(self.dates)[-1*num:]
+        order = np.argsort(self.dates)
         self.vecs = self.vecs[order]
         self.dates = self.dates[order]
         # print("preprocessing", self.vecs.shape)
@@ -187,7 +206,8 @@ class EventDetector:
 
     def parallel_clustering(self):
         for pair in self.subsets:
-            new_event_cluster = EventCluster(t=self.cluster_threshold)
+            new_event_cluster = EventCluster(
+                t=self.cluster_threshold, p=self.portion)
             new_event_cluster.onepass_add(
                 self.vecs[pair[0]:pair[1]], self.dates[pair[0]:pair[1]])
             self.event_cluster_set.append(new_event_cluster)
@@ -206,7 +226,9 @@ class EventDetector:
                 event_1 = E_ti
                 event_2 = None
                 for E_k in E:
-                    score = self.sim(E_ti.centroid, E_k.centroid)
+                    score_t = self.sim(E_ti.centroid_t, E_k.centroid_t)
+                    score_d = self.sim(E_ti.centroid_d, E_k.centroid_d)
+                    score = self.portion * score_t + (1-self.portion) * score_d
                     if score > max_sim:
                         max_sim = score
                         event_2 = E_k
@@ -222,8 +244,10 @@ class EventDetector:
     def merge(self, e1, e2):
         e1.start_time = min(e1.start_time, e2.start_time)
         e1.end_time = max(e1.end_time, e2.end_time)
-        e1.centroid = (e1.centroid * e1.node_num + e2.centroid *
-                       e2.node_num) / (e1.node_num + e2.node_num)
+        e1.centroid_t = (e1.centroid_t * e1.node_num + e2.centroid_t *
+                         e2.node_num) / (e1.node_num + e2.node_num)
+        e1.centroid_d = (e1.centroid_d * e1.node_num + e2.centroid_d *
+                         e2.node_num) / (e1.node_num + e2.node_num)
         e1.node_num += e2.node_num
         e1.node_list += e2.node_list
         return e1
@@ -234,14 +258,19 @@ class EventDetector:
         # file.close()
 
         # from cluster import EventDetector
-
-        utils.save_cluster(self)
+        self.event_list = [
+            self.event_set[i].node_list for i in range(len(self.event_set))]
+        self.event_list = np.array(self.event_list)
+        utils.save_detector(self)
 
     def construct_inverted_index(self):
-        self.inverted_index = {}
+        self.inverted_index = []
         for i in range(len(self.event_set)):
             for j in self.event_set[i].node_list:
-                self.inverted_index[str(j)] = i
+                self.inverted_index.append([j, i])
+
+        self.inverted_index = np.array(self.inverted_index)
+        # print(self.inverted_index)
 
     def plot_result(self):
         assert self.vecs.shape[1] == 3
@@ -289,14 +318,18 @@ def parse_args():
                         help='threshold for merge subsets')
     parser.add_argument('--time_slice', type=int,
                         help='threshold for merge subsets')
+    parser.add_argument('--p', type=float,
+                        help='portion of tfidf score for merge subsets')
+    parser.add_argument('--mode', type=str,
+                        help='mode')
     args = parser.parse_args()
-    return args.ct, args.mt, args.time_slice
+    return args.ct, args.mt, args.time_slice, args.p, args.mode
 
 
 def test(path, name, min_size=3, num=1, data_type='json'):
     print("Load model from {}".format(path))
     filehandler = open(path, 'rb')
-  
+
     detector = pickle.load(filehandler)
     print("detector name: ", detector.name)
     print("# Parameters: cluster_threshold: {}, merge_threshold: {}, time_slice: {}(days)".format(
@@ -338,42 +371,35 @@ def show_event(detector, name, min_size, num, data_type):
         i += 1
 
 
-if __name__ == "__main__":
-
-   
-    corpus_name = "text_log_mailonline"
-    vecs = np.load('{}{}_docs.npy'.format(vecs_path, corpus_name))
-    dates = np.load('{}{}_dates.npy'.format(vecs_path, corpus_name))
-    cluster_threshold = 0.8
-    merge_threshold = 0.9
+def main():
+    encode_type = 'mixed'
+    corpus_name = "text_log"
+    vecs = np.load('{}\\{}_{}_docs.npy'.format(
+        vecs_path, corpus_name, encode_type))
+    dates = np.load('{}\\{}_dates.npy'.format(vecs_path, corpus_name))
+    cluster_threshold = 0.7
+    merge_threshold = 0.8
     time_slice = 7
+    portion = 0.7
+    mode = 'train'
 
     import sys
     if len(sys.argv) > 3:
-        cluster_threshold, merge_threshold, time_slice = parse_args()
+        cluster_threshold, merge_threshold, time_slice, mode = parse_args()
     else:
         import warnings
         warnings.warn("Using default Parameters ")
-
-    # vecs = np.hstack((vecs[:, -1].reshape((-1, 1)), vecs[:, :300]))
-    # dates = np.arange(vecs.shape[0]).reshape((-1, 1))
-    # test_vecs = vecs[30000:]
-    # test_dates = dates[30000:]
-
-    # Single Cluster
-    # cluster1 = EventCluster(cluster_threshold)
-    # cluster1.onepass_add(vecs, dates)
-    # cluster1.print_result(fo)
-
     # Multiple Cluster and Merging
 
     # mode = 'test'
-    from cluster import EventDetector
-    mode = 'train'
     if mode == 'train':
         detector = EventDetector(vecs, dates, cluster_threshold,
-                                 merge_threshold, time_slice, name=corpus_name)
+                                 merge_threshold, portion, time_slice, name=corpus_name)
         detector.run()
     else:
-        test("../detector_models/text_log_mailonline_0.8_0.9.txt",
-             "text_log_mailonline", 3, 5, data_type="json")
+        test(os.path.join(dirname, "./detector_models/{}_{}_{}_{}.pkl".format(corpus_name, cluster_threshold, merge_threshold, portion)),
+             corpus_name, 2, 5, data_type="json")
+
+
+if __name__ == "__main__":
+    main()
