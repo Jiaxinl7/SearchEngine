@@ -10,8 +10,9 @@ frontend
 .vscode
 
 
-code/.vscode
-code/__pycache__
-code/indexdir
+.vscode
+backend/server/server/__pycache__/*
+*.pyc
+indexdir
 
-frontend/node_modules
+node_modules
