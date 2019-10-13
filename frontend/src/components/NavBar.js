@@ -1,6 +1,9 @@
 import React, { Component } from "react";
 import { Menu, Input, Button, Icon } from "semantic-ui-react";
 import { withRouter } from "react-router-dom";
+import newsicon from '../static/document.png'
+
+
 class NavBar extends Component {
   state = {};
   constructor(props) {
@@ -38,7 +41,7 @@ class NavBar extends Component {
     return (
       <Menu stackable>
         <Menu.Item>
-          <img src="https://react.semantic-ui.com/logo.png" />
+          <img src={newsicon} />
         </Menu.Item>
 
         <Menu.Item
@@ -49,11 +52,11 @@ class NavBar extends Component {
           Home
         </Menu.Item>
         <Menu.Item
-          name="Hot Event"
+          name="Spotlight"
           active={activeItem === "Source"}
           onClick={this.navigateToHotEvent}
         >
-          Source
+          Spotlight
         </Menu.Item>
 
         <Menu.Item>

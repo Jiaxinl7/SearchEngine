@@ -7,8 +7,8 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import codecs
-# import tools.utils as utils
-import utils
+import tools.utils as utils
+# import utils
 import json
 import pickle
 import pandas as pd
@@ -17,9 +17,10 @@ pd.set_option('display.max_colwidth', 500)
 
 dirname = os.path.dirname(__file__)
 vecs_path = os.path.join(dirname, 'vecs')
-data_path = os.path.join(dirname, "data")
+data_path = os.path.join(dirname, "../../../data")
 model_path = os.path.join(dirname, "detector_models")
 
+dim = 300
 
 class EventUnit:
     def __init__(self):
@@ -31,8 +32,8 @@ class EventUnit:
         self.end_time = None    # last doc in the event
 
     def add_node(self, node_id, node_time, node_vec):
-        node_vec_d = node_vec[:300]
-        node_vec_t = node_vec[300:]
+        node_vec_d = node_vec[:dim]
+        node_vec_t = node_vec[dim:]
         self.node_list.append(node_id.astype(int))
         try:
             self.centroid_d = (self.node_num * self.centroid_d +
@@ -74,8 +75,8 @@ class EventCluster:
         :return min: minimum distance between vec and all centroids
         :return rank[-1]: the event_id with minimum distance
         """
-        vec_d = vec[:300]
-        vec_t = vec[300:]
+        vec_d = vec[:dim]
+        vec_t = vec[dim:]
         dist_sim = np.empty(len(self.event_list))
         for i in range(dist_sim.shape[0]):
             d_sim = np.inner(vec_d, self.event_list[i].centroid_d) / \
@@ -178,13 +179,17 @@ class EventDetector:
         self.name = "{}_{}_{}_{}".format(
             name, cluster_threshold, merge_threshold, portion)
 
-    def preprocessing(self, num=3000):
+    def preprocessing(self, num):
         """
         sort vecs by time in ascending order
         """
-        order = np.argsort(self.dates)[:num]
-        self.vecs = self.vecs[order]
-        self.dates = self.dates[order]
+        order = np.argsort(self.dates)
+        if num is not None:
+            self.vecs = self.vecs[order][-1*num:]
+            self.dates = self.dates[order][-1*num:]
+        else:
+            self.vecs = self.vecs[order]
+            self.dates = self.dates[order]
         # print("preprocessing", self.vecs.shape)
 
     def time_slicing(self):
@@ -258,15 +263,12 @@ class EventDetector:
         # file.close()
 
         # from cluster import EventDetector
-        self.event_list = [
-            self.event_set[i].node_list for i in range(len(self.event_set))]
-        self.event_list = np.array(self.event_list)
         utils.save_detector(self)
 
     def construct_inverted_index(self):
         self.inverted_index = []
-        for i in range(len(self.event_set)):
-            for j in self.event_set[i].node_list:
+        for i in range(self.event_list.shape[0]):
+            for j in self.event_list[i]:
                 self.inverted_index.append([j, i])
 
         self.inverted_index = np.array(self.inverted_index)
@@ -279,7 +281,7 @@ class EventDetector:
             true_vecs[:, 1], true_vecs[:, 2], c=self.inverted_index)
         plt.show()
 
-    def run(self):
+    def run(self, save=True, num=None):
         print("input shape:", self.vecs.shape, self.dates.shape)
         print("# Parameters: cluster_threshold: {}, merge_threshold: {}, time_slice: {}(days)".format(
             self.cluster_threshold, self.merge_threshold, self.time_slice))
@@ -287,7 +289,7 @@ class EventDetector:
         print("EventDetector: Start Running!")
         start = time.time()
         print("preprocessing...")
-        self.preprocessing()
+        self.preprocessing(num)
         print("time_slicing...")
         self.time_slicing()
         print(self.subsets)
@@ -301,8 +303,12 @@ class EventDetector:
         self.merge_all_events()
         print("Events number after merging: {}.".format(len(self.event_set)))
         print("constructing inverted index...")
+        self.event_list = [
+            self.event_set[i].node_list for i in range(len(self.event_set))]
+        self.event_list = np.array(self.event_list)
         self.construct_inverted_index()
-        self.save(model_path)
+        if save:
+            self.save(model_path)
         end = time.time()
         print("Running Time: {}".format(end-start))
 
@@ -338,33 +344,37 @@ def test(path, name, min_size=3, num=1, data_type='json'):
     show_event(detector, name, min_size, num, data_type)
 
 
-def show_event(detector, name, min_size, num, data_type):
+def predict(index):
+    id = index[:, 0]
+    new_index = index[np.argsort(id)]
+    y_pred = new_index[:, 1]
+    return y_pred
+
+
+def show_event(events, name, min_size, num, data_type):
     i = 0
     if data_type == 'csv':
         csv_data = pd.read_csv(data_path+name+'.csv')
     else:
-        path = data_path+name+'/'
+        path = os.path.join(data_path, name)
     for j in range(num):
-        while len(detector.event_set[i].node_list) < min_size and i < len(detector.event_set):
+        while len(events[i]) < min_size and i < len(events):
             i += 1
-        print(detector.event_set[i].node_list)
+        print(events[i])
         if data_type == 'csv':
-            df = csv_data.loc[csv_data['id'].isin(
-                detector.event_set[i].node_list)]
+            df = csv_data.loc[csv_data['id'].isin(events[i])]
             print(df[['title']])
         else:
-            for item_path in detector.event_set[i].node_list:
+            for item_path in events[i]:
                 if data_type == 'json':
                     fp = codecs.open(
-                        '{}{}.json'.format(path, item_path), 'r', 'utf-8')
+                        os.path.join(path, str(item_path)+'.json'), 'r', 'utf-8')
                     news = json.loads(fp.read())
                     # text = news['full_text']
-                    text = news['title']
-                    print(item_path)
-                    print(text)
+                    print(news['title'])
                     fp.close()
                 if data_type == 'txt':
-                    fp = open('{}{}.json'.format(path, item_path))
+                    fp = open(os.path.join(path, item_path))
                     print(fp.read())
                     fp.close()
         print("-----------------------------------------------------------------------------------")
@@ -372,16 +382,17 @@ def show_event(detector, name, min_size, num, data_type):
 
 
 def main(name):
-    encode_type = 'mixed'
+    encode_type = "mixed"
     corpus_name = name
     vecs = np.load('{}\\{}_{}_docs.npy'.format(
         vecs_path, corpus_name, encode_type))
     dates = np.load('{}\\{}_dates.npy'.format(vecs_path, corpus_name))
-    cluster_threshold = 0.1
-    merge_threshold = 0.1
+    encode_type = 'mixed'
+    cluster_threshold = 0.05
+    merge_threshold = 0.05
     time_slice = 7
-    portion = 0
-    mode = 'train'
+    portion = 1.0
+    mode = 'test'
 
     import sys
     if len(sys.argv) > 3:
@@ -392,14 +403,28 @@ def main(name):
     # Multiple Cluster and Merging
 
     # mode = 'test'
-    if mode == 'train':
-        detector = EventDetector(vecs, dates, cluster_threshold,
-                                 merge_threshold, portion, time_slice, name=corpus_name)
-        detector.run()
-    else:
-        test(os.path.join(dirname, "./detector_models/{}_{}_{}_{}.pkl".format(corpus_name, cluster_threshold, merge_threshold, portion)),
-             corpus_name, 2, 5, data_type="json")
+    log = []
+    for i in [0.7]:
+        for j in [0.7]:
+            for p in [0.7]:
+                # detector = EventDetector(vecs, dates, i,
+                #                          j, p, time_slice, name=corpus_name)
+                # detector.run(save=True)
+                event, index = utils.load_detector(
+                    "./detector_models/{}_{}_{}_{}".format(corpus_name, i, j, p))
+                # event, index = detector.event_list, detector.inverted_index
+                show_event(event, corpus_name, 4, 70, 'json')
+                # print(event)
+                # y = [0,0,0,0,1,1,1,1,1,2,2,2,2,2,3,3,3,3,3,4,4,5,5,5,5,6,6,6,6,6,6,7,7,7,7,8,8,8,9,9,9,9,9,10,10,10,10,11,1,11,12,12,12,12,13,13,13,13,13,4,14,14,14]
+                # predict(index)
+                # from sklearn import metrics
+                # ari = metrics.adjusted_mutual_info_score(y,predict(index))
+                # v = metrics.v_measure_score(y,predict(index))
+                # log.append("{:^10} {:^10} {:^10} {:^10} {:^10}".format(i,j,p,ari,v))
+                # log.append(metrics.classification_report(y,predict(index)))
+    for item in log:
+        print(item)
 
 
 if __name__ == "__main__":
-    main("text_log")
+    main("text_log_mailonline")

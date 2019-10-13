@@ -40,7 +40,7 @@ class HotTopic extends Component {
     var results = [];
     var getEventNews = this.getEventNews;
     if (this.state.results != null) {
-      this.state.results.forEach(function(result, i) {
+      this.state.results.forEach(function (result, i) {
         results.push(
           <List.Item
             as="a"
@@ -65,7 +65,7 @@ class HotTopic extends Component {
       <div>
         <Header as="h3">
           <Icon name="paper plane outline" />
-          <Header.Content>Hot Events</Header.Content>
+          <Header.Content>Spotlight</Header.Content>
         </Header>
         <List link divided relaxed>
           {results}

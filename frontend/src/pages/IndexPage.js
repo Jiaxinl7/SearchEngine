@@ -11,29 +11,6 @@ import {
 import { withRouter } from "react-router-dom";
 import { ETIME } from "constants";
 
-const options = [
-  {
-    key: "all",
-    text: "All",
-    value: "all"
-  },
-  {
-    key: "nyt",
-    text: "New York Times",
-    value: "nyt"
-  },
-  {
-    key: "cnn",
-    text: "CNN",
-    value: "cnn"
-  },
-  {
-    key: "bbc",
-    text: "BBC",
-    value: "bbc"
-  }
-];
-
 class Index extends Component {
   constructor(props) {
     super(props);
@@ -91,7 +68,6 @@ class Index extends Component {
           >
             <Icon name="search" />
             <input />
-            <Select compact options={options} defaultValue="all" />
             <Button primary type="submit" onClick={this.clicksearch}>
               Search
             </Button>

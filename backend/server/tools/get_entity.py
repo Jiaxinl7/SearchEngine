@@ -1,5 +1,6 @@
-from flair.data import Sentence
-from flair.models import SequenceTagger
+import pandas as pd
+# from flair.data import Sentence
+# from flair.models import SequenceTagger
 import os
 import json
 import codecs
@@ -7,38 +8,39 @@ import re
 import string
 
 dirname = os.path.dirname(__file__)
-data_path = os.path.join(dirname, '../../../data/text_log_mailonline')
+data_path = os.path.join(dirname, '../../../data/labeled_news')
+
+results = []
 
 
 def read_json(root):
     error_files = []
     filepaths = [os.path.join(root, i) for i in os.listdir(root)]
-    tagger = SequenceTagger.load('ner')
+    # tagger = SequenceTagger.load('ner')
     for i, path in enumerate(filepaths):
-        if i % 100 == 0:
+        if i % 10 == 0:
             print('Adding {} docs'.format(i))
         fp = codecs.open(path, 'r', 'utf-8')
         try:
             news = json.loads(fp.read())
-            if 'entity' in news:
-                continue
-            try:
-                text = news['title'] + " " + news['description']
-            except:
-                text = " "
-            #text = string.capwords(text)
-            entity = get_name(text,tagger)
-            news['entity'] = entity
-            jf = codecs.open(path, 'w', 'utf-8')
-            json.dump(news, jf)
+            results.append(news['label'])
+            # if 'entity' in news:
+            #     continue
+            # try:
+            #     text = news['title'] + " " + news['description']
+            # except:
+            #     text = " "
+            # #text = string.capwords(text)
+            # entity = get_name(text, tagger)
+            # news['entity'] = entity
+            # jf = codecs.open(path, 'w', 'utf-8')
+            # json.dump(news, jf)
         except:
-            print("error",path)
+            print("error", path)
             error_files.append(path)
-      
-      
 
 
-def get_name(title,tagger):
+def get_name(title, tagger):
     title = re.sub('[^\w\s]', ' ', title)
     title = Sentence(title)
     tagger.predict(title)
@@ -53,3 +55,9 @@ def get_name(title,tagger):
 
 if __name__ == "__main__":
     read_json(data_path)
+    print(results)
+    df = pd.DataFrame(data=results, index=range(
+        len(results)), columns=["label"])
+    count_result = df.groupby(['label']).size()
+    real_result =  count_result.value_counts()
+    print(real_result)

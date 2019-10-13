@@ -12,11 +12,12 @@ import json
 import numpy as np
 import os
 from datetime import datetime
+import codecs
 
 
 class Searcher:
     def __init__(self, ix_path, cluster_path):
-        print("THis is searcher")
+        print("This is searcher")
         # tools.detector.main()
         self.cluster_path = os.path.join(
             os.path.dirname(__file__), cluster_path).replace('/', '\\')
@@ -30,11 +31,20 @@ class Searcher:
         event_size = np.empty(self.event_list.shape[0])
         for i in range(self.event_list.shape[0]):
             event_size[i] = len(self.event_list[i])
-        self.event_list = self.event_list[np.argsort(event_size)]
+        self.sorted_event_list = self.event_list[np.argsort(event_size)]
 
     def get_result_page(self, query, pagenum):
         with self.ix.searcher(weighting=scoring.BM25F()) as searcher:
             q = QueryParser("content", self.ix.schema).parse(query)
+            corrected = searcher.correct_query(q, query)
+            hasSuggestion = False
+            corrected_query = None
+            if corrected.query != q:
+                print("Did you mean:", corrected.string)
+                hasSuggestion = True
+                corrected_query = corrected.string
+                q = corrected.query
+
             # results = searcher.search(q, limit=10)
             # print(results.docs())
             results = searcher.search_page(q, pagenum, pagelen=8)
@@ -43,14 +53,13 @@ class Searcher:
                                                    results.offset + results.pagelen + 1, len(results)))
             result_list = []
             for hit in results:
-
                 temp = {
                     "title": hit["title"],
                     "url": hit["url"],
                     "pubtime": hit["pubtime"].strftime('%Y-%m-%d'),
                     # "miss": q.all_terms() - hit.matched_terms(),
                     "content": hit.highlights("content", text=hit["textdata"], top=5),
-                    "docnum": hit.docnum,
+                    "docnum": hit['docid'],
                     "source": hit["source"],
                 }
                 result_list.append(temp)
@@ -58,6 +67,8 @@ class Searcher:
             response = {
                 "pagenum": results.pagenum,
                 "query": query,
+                "correctedquery": corrected_query,
+                "hassuggestion": hasSuggestion,
                 "pagecount":  results.pagecount,
                 "offset": results.offset,
                 "results": result_list
@@ -66,26 +77,40 @@ class Searcher:
             return response
 
     def get_event_news(self, docnum):
-        # i = 0
-        # while not(docnum in self.cluster.event_set[i].node_list):
-        #     i += 1
-        # print(self.inverted_index)
-        # print(self.inverted_index[0])
-        # print(self.inverted_index[0, 0])
-        # doc_ids = self.event_list[event_id]
-        doc_ids = [10389, 10390, 10391, 10392, 10393]
-        reader = self.ix.reader()
+        # docnum1 = 14502
+        # print(type(docnum))
+        # print("docnum: ", docnum1)
+        event_id = None
+
+        for i in range(self.inverted_index.shape[0]):
+            if int(docnum) == self.inverted_index[i, 0]:
+                print(self.inverted_index[i])
+                event_id = self.inverted_index[i, 1]
+                break
+
+        print(self.inverted_index.shape, self.event_list.shape)
+        print(event_id)
+        doc_ids = self.event_list[event_id]
+        print(doc_ids)
+        # doc_ids = [18363, 18367, 18224, 922]
+        # reader = self.ix.reader()
         result_list = []
-        for id in doc_ids:
-            item = reader.stored_fields(id)
+        filepaths = [os.path.join(
+            os.path.dirname(__file__), "../../../data/text_log_mailonline/{}.json".format(docid)).replace('/', '\\') for docid in doc_ids]
+        for path in filepaths:
+            # item = reader.stored_fields(id)
+            fp = codecs.open(path, 'r', 'utf-8')
+
+            item = json.loads(fp.read())
             tmp = {
                 "title": item['title'],
                 "url": item['url'],
-                "pubtime": item["pubtime"].strftime('%Y-%m-%d'),
-                "content": item['textdata'][:200],
+                "pubtime": item["date_publish"][:10],
+                "content": item['text'][:200],
                 "source": item["source"],
             }
             result_list.append(tmp)
+            fp.close()
 
         response = {
             "docnum": docnum,
@@ -94,24 +119,30 @@ class Searcher:
         return response
 
     def get_hot_event_title(self, pagenum=1):
-        hotevent_per_page = 5
+        hotevent_per_page = 8
         count = -1 * (pagenum * hotevent_per_page)-1
         result_list = []
-        for event in self.event_list[count:(count+hotevent_per_page)]:
+        for event in self.sorted_event_list[count:(count+hotevent_per_page)]:
             # get the first news of the event
-            reader = self.ix.reader()
-            item = reader.stored_fields(event[0])
+            # reader = self.ix.reader()
+            # item = reader.stored_fields(event[0])
+            path = os.path.join(os.path.dirname(
+                __file__), "../../../data/text_log_mailonline/{}.json".format(event[0])).replace('/', '\\')
+            fp = codecs.open(path, 'r', 'utf-8')
+            item = json.loads(fp.read())
             tmp = {
                 "title": item['title'],
                 "url": item['url'],
-                "pubtime": item["pubtime"].strftime('%Y-%m-%d'),
+                "pubtime": item["date_publish"][:10],
                 "source": item["source"],
                 "docnum": int(event[0])
             }
             result_list.append(tmp)
+            fp.close()
+
         response = {
             "results": result_list,
-            "pagecount": self.event_list.shape[0] // hotevent_per_page + 1
+            "pagecount": self.sorted_event_list.shape[0] // hotevent_per_page + 1
         }
         return response
 
@@ -120,24 +151,31 @@ class Searcher:
         hotevent_per_page = 5
         count = -1 * (pagenum * hotevent_per_page)-1
         result_list = []
-        for event in self.event_list[count:(count+hotevent_per_page)]:
+        for event in self.sorted_event_list[count:(count+hotevent_per_page)]:
             events = []
-            for id in event:
-                reader = self.ix.reader()
-                item = reader.stored_fields(id)
+            count = 0
+            for event_id in event:
+                if count >= 3:
+                    break
+                path = os.path.join(os.path.dirname(
+                    __file__), "../../../data/text_log_mailonline/{}.json".format(event_id)).replace('/', '\\')
+                fp = codecs.open(path, 'r', 'utf-8')
+                item = json.loads(fp.read())
                 tmp = {
                     "title": item['title'],
                     "url": item['url'],
-                    "pubtime": item["pubtime"].strftime('%Y-%m-%d'),
-                    "content": item['textdata'][:200],
+                    "pubtime": item["date_publish"][:10],
+                    "content": item['text'][:200],
                     "source": item["source"],
-                    "docnum": int(id)
+                    "docnum": int(event_id)
                 }
                 events.append(tmp)
+                fp.close()
+                count += 1
             result_list.append(events)
         response = {
             "results": result_list,
-            "pagecount": self.event_list.shape[0] // hotevent_per_page + 1
+            "pagecount": self.sorted_event_list.shape[0] // hotevent_per_page + 1
         }
         return response
 

@@ -20,7 +20,7 @@ def get_schema():
     modtime(time of last modification)
     '''
     ana = StemmingAnalyzer()
-    return Schema(title=TEXT(stored=True), path=ID, url=ID(stored=True),
+    return Schema(title=TEXT(stored=True), path=ID, docid=ID(stored=True), url=ID(stored=True),
                   content=TEXT(analyzer=ana), textdata=TEXT(stored=True),
                   pubtime=DATETIME(stored=True), modtime=STORED, source=TEXT(stored=True))
 
@@ -33,9 +33,10 @@ def add_doc(writer, path):
     title = news['title']
     url = news['url']
     source = news['source']
+    docid = os.path.basename(path).split(".")[0]
     date = datetime.strptime(news['date_publish'][:10], '%Y-%m-%d')
     modtime = os.path.getmtime(path)
-    writer.add_document(title=title, path=path, url=url,
+    writer.add_document(title=title, path=path, docid=docid, url=url,
                         content=text, textdata=text, pubtime=date, modtime=modtime, source=source)
     fp.close()
 
